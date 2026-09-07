@@ -96,6 +96,7 @@ html, body {
   padding: 14px 16px;
   cursor: grab;
   user-select: none;
+  touch-action: none;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -192,4 +193,26 @@ html, body {
 
 .edge-label:focus {
   background: #f7f7f7;
+}
+
+@media (max-width: 560px) {
+  #toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 16px 20px;
+  }
+
+  .toolbar-actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .toolbar-actions button {
+    margin-left: 0;
+  }
+
+  #canvas-wrapper {
+    height: calc(100vh - 108px);
+  }
 }

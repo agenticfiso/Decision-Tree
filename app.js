@@ -175,7 +175,7 @@
       node.text = textEl.textContent;
       save();
     });
-    textEl.addEventListener("mousedown", function (e) {
+    textEl.addEventListener("pointerdown", function (e) {
       e.stopPropagation();
     });
     textEl.addEventListener("blur", function () {
@@ -198,14 +198,14 @@
       opt.textContent = String(i);
       select.appendChild(opt);
     }
-    select.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+    select.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
     select.addEventListener("click", function (e) { e.stopPropagation(); });
 
     var addBtn = document.createElement("button");
     addBtn.className = "add-outputs-btn";
     addBtn.type = "button";
     addBtn.textContent = "Outputs erstellen";
-    addBtn.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+    addBtn.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
     addBtn.addEventListener("click", function (e) {
       e.stopPropagation();
       var count = parseInt(select.value, 10);
@@ -216,7 +216,7 @@
     controls.appendChild(addBtn);
     el.appendChild(controls);
 
-    el.addEventListener("mousedown", function (e) {
+    el.addEventListener("pointerdown", function (e) {
       startDrag(node, el, e);
     });
 
@@ -260,7 +260,7 @@
     label.textContent = edge.label;
     label.style.left = midX + "px";
     label.style.top = midY + "px";
-    label.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+    label.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
     label.addEventListener("input", function () {
       edge.label = label.textContent;
       save();
@@ -347,7 +347,7 @@
   var dragState = null;
 
   function startDrag(node, el, e) {
-    if (e.button !== 0) return;
+    if (e.button !== undefined && e.button !== 0) return;
     var wrapperRect = canvasWrapper.getBoundingClientRect();
     var scrollLeft = canvasWrapper.scrollLeft;
     var scrollTop = canvasWrapper.scrollTop;
@@ -357,12 +357,17 @@
     dragState = {
       node: node,
       el: el,
+      pointerId: e.pointerId,
       offsetX: pointerX - node.x,
       offsetY: pointerY - node.y
     };
     el.classList.add("dragging");
-    document.addEventListener("mousemove", onDragMove);
-    document.addEventListener("mouseup", onDragEnd);
+    if (el.setPointerCapture && e.pointerId !== undefined) {
+      el.setPointerCapture(e.pointerId);
+    }
+    el.addEventListener("pointermove", onDragMove);
+    el.addEventListener("pointerup", onDragEnd);
+    el.addEventListener("pointercancel", onDragEnd);
     e.preventDefault();
   }
 
@@ -387,9 +392,11 @@
 
   function onDragEnd() {
     if (!dragState) return;
-    dragState.el.classList.remove("dragging");
-    document.removeEventListener("mousemove", onDragMove);
-    document.removeEventListener("mouseup", onDragEnd);
+    var el = dragState.el;
+    el.classList.remove("dragging");
+    el.removeEventListener("pointermove", onDragMove);
+    el.removeEventListener("pointerup", onDragEnd);
+    el.removeEventListener("pointercancel", onDragEnd);
     dragState = null;
     growCanvasIfNeeded();
     save();
