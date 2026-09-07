@@ -159,6 +159,9 @@
       delBtn.type = "button";
       delBtn.title = "Knoten löschen";
       delBtn.textContent = "×";
+      delBtn.addEventListener("pointerdown", function (e) {
+        e.stopPropagation();
+      });
       delBtn.addEventListener("click", function (e) {
         e.stopPropagation();
         deleteNode(node.id);
@@ -234,6 +237,31 @@
     };
   }
 
+  var MARKER_SIZE = 5;
+
+  function elbowPath(start, end) {
+    var midY = (start.bottomY + end.topY) / 2;
+    return "M " + start.bottomX + " " + start.bottomY +
+      " L " + start.bottomX + " " + midY +
+      " L " + end.topX + " " + midY +
+      " L " + end.topX + " " + end.topY;
+  }
+
+  function setMarkerPos(rect, x, y) {
+    rect.setAttribute("x", x - MARKER_SIZE / 2);
+    rect.setAttribute("y", y - MARKER_SIZE / 2);
+  }
+
+  function makeMarker(edgeId, role) {
+    var rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("class", "edge-marker");
+    rect.setAttribute("width", MARKER_SIZE);
+    rect.setAttribute("height", MARKER_SIZE);
+    rect.dataset.edgeId = edgeId;
+    rect.dataset.role = role;
+    return rect;
+  }
+
   function renderEdge(edge) {
     var fromNode = state.nodes[edge.from];
     var toNode = state.nodes[edge.to];
@@ -242,13 +270,18 @@
     var start = nodeCenter(fromNode);
     var end = nodeCenter(toNode);
 
-    var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", start.bottomX);
-    line.setAttribute("y1", start.bottomY);
-    line.setAttribute("x2", end.topX);
-    line.setAttribute("y2", end.topY);
-    line.dataset.edgeId = edge.id;
-    edgeLayer.appendChild(line);
+    var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", elbowPath(start, end));
+    path.dataset.edgeId = edge.id;
+    edgeLayer.appendChild(path);
+
+    var startMarker = makeMarker(edge.id, "start");
+    setMarkerPos(startMarker, start.bottomX, start.bottomY);
+    edgeLayer.appendChild(startMarker);
+
+    var endMarker = makeMarker(edge.id, "end");
+    setMarkerPos(endMarker, end.topX, end.topY);
+    edgeLayer.appendChild(endMarker);
 
     var midX = (start.bottomX + end.topX) / 2;
     var midY = (start.bottomY + end.topY) / 2;
@@ -278,24 +311,24 @@
   function updateConnectedEdges(nodeId) {
     state.edges.forEach(function (edge) {
       if (edge.from === nodeId || edge.to === nodeId) {
-        var lineEl = edgeLayer.querySelector('line[data-edge-id="' + edge.id + '"]');
-        var labelEl = null;
-        // find matching label by index (rebuild positions)
+        var pathEl = edgeLayer.querySelector('path[data-edge-id="' + edge.id + '"]');
         var fromNode = state.nodes[edge.from];
         var toNode = state.nodes[edge.to];
-        if (!fromNode || !toNode || !lineEl) return;
+        if (!fromNode || !toNode || !pathEl) return;
         var start = nodeCenter(fromNode);
         var end = nodeCenter(toNode);
-        lineEl.setAttribute("x1", start.bottomX);
-        lineEl.setAttribute("y1", start.bottomY);
-        lineEl.setAttribute("x2", end.topX);
-        lineEl.setAttribute("y2", end.topY);
+        pathEl.setAttribute("d", elbowPath(start, end));
+
+        var startMarker = edgeLayer.querySelector('rect[data-edge-id="' + edge.id + '"][data-role="start"]');
+        var endMarker = edgeLayer.querySelector('rect[data-edge-id="' + edge.id + '"][data-role="end"]');
+        if (startMarker) setMarkerPos(startMarker, start.bottomX, start.bottomY);
+        if (endMarker) setMarkerPos(endMarker, end.topX, end.topY);
 
         var midX = (start.bottomX + end.topX) / 2;
         var midY = (start.bottomY + end.topY) / 2;
         var labels = labelLayer.querySelectorAll(".edge-label");
         var idx = state.edges.indexOf(edge);
-        labelEl = labels[idx];
+        var labelEl = labels[idx];
         if (labelEl) {
           labelEl.style.left = midX + "px";
           labelEl.style.top = midY + "px";
