@@ -82,10 +82,105 @@ html, body {
   border-color: var(--accent-fill);
 }
 
+#tabbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  padding: 0 40px;
+  border-bottom: 1px solid var(--border-dim);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+#tab-list {
+  display: flex;
+  align-items: flex-end;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 10px 14px;
+  margin-bottom: -1px;
+  border: 1px solid transparent;
+  border-bottom: 1px solid var(--border-dim);
+  cursor: pointer;
+  max-width: 200px;
+}
+
+.tab.active {
+  border-color: var(--border-dim);
+  border-bottom-color: var(--bg);
+  background: var(--bg);
+}
+
+.tab .tab-name {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--text-dim);
+  outline: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+  cursor: text;
+}
+
+.tab.active .tab-name {
+  color: var(--text);
+}
+
+.tab .tab-name:focus {
+  color: var(--text);
+  text-overflow: clip;
+}
+
+.tab .tab-close {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.tab .tab-close:hover {
+  background: var(--accent-fill);
+  color: var(--accent-fg);
+}
+
+#new-tab-btn {
+  flex-shrink: 0;
+  margin-bottom: -1px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 15px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+#new-tab-btn:hover {
+  color: var(--text);
+}
+
 #canvas-wrapper {
   position: relative;
   width: 100%;
-  height: calc(100vh - 78px);
+  height: calc(100vh - 113px);
   overflow: auto;
   background-image: radial-gradient(circle, var(--grid-dot) 1px, transparent 1px);
   background-size: 28px 28px;
@@ -270,7 +365,11 @@ html, body {
     flex: 1;
   }
 
+  #tabbar {
+    padding: 0 20px;
+  }
+
   #canvas-wrapper {
-    height: calc(100vh - 118px);
+    height: calc(100vh - 153px);
   }
 }

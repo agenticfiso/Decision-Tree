@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var STORAGE_KEY = "decision-tree-data";
+  var STORAGE_KEY = "decision-tree-workspace";
   var NODE_WIDTH = 180;
   var LEVEL_HEIGHT = 160;
   var SIBLING_GAP = 40;
@@ -13,50 +13,72 @@
   var labelLayer = document.getElementById("label-layer");
   var edgeLayer = document.getElementById("edge-layer");
   var arrangeBtn = document.getElementById("arrange-btn");
-  var resetBtn = document.getElementById("reset-btn");
+  var tabList = document.getElementById("tab-list");
+  var newTabBtn = document.getElementById("new-tab-btn");
 
-  var state = null;
+  var workspace = null; // { activeId, order: [diagramId...], diagrams: { id: diagram } }
+  var state = null; // reference to workspace.diagrams[workspace.activeId]
 
   function uid() {
     return "n" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   }
 
-  function createDefaultState() {
+  // ---------- Diagram / workspace model ----------
+  function makeDiagram(name) {
     var rootId = uid();
-    return {
+    var diagram = {
+      id: uid(),
+      name: name,
       rootId: rootId,
-      nodes: {
-        // id: { id, text, x, y }
-      },
-      edges: [] // { id, from, to, label }
+      nodes: {},
+      edges: []
     };
+    diagram.nodes[rootId] = { id: rootId, text: "Thema", x: 0, y: 0 };
+    return diagram;
   }
 
-  function makeInitialState() {
-    var s = createDefaultState();
-    s.nodes[s.rootId] = { id: s.rootId, text: "Thema", x: 0, y: 0 };
-    return s;
+  function makeInitialWorkspace() {
+    var diagram = makeDiagram("Diagramm 1");
+    var diagrams = {};
+    diagrams[diagram.id] = diagram;
+    return { activeId: diagram.id, order: [diagram.id], diagrams: diagrams };
+  }
+
+  function setActiveState() {
+    state = workspace.diagrams[workspace.activeId];
   }
 
   function load() {
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return makeInitialState();
+      if (!raw) return makeInitialWorkspace();
       var parsed = JSON.parse(raw);
-      if (!parsed || !parsed.rootId || !parsed.nodes || !parsed.nodes[parsed.rootId]) {
-        return makeInitialState();
+      if (!parsed || !parsed.diagrams || !Array.isArray(parsed.order)) {
+        return makeInitialWorkspace();
       }
-      if (!Array.isArray(parsed.edges)) parsed.edges = [];
-      return parsed;
+      var validOrder = parsed.order.filter(function (id) {
+        var d = parsed.diagrams[id];
+        return d && d.rootId && d.nodes && d.nodes[d.rootId];
+      });
+      if (validOrder.length === 0) return makeInitialWorkspace();
+      validOrder.forEach(function (id) {
+        var d = parsed.diagrams[id];
+        if (!Array.isArray(d.edges)) d.edges = [];
+        if (!d.name || !String(d.name).trim()) d.name = "Diagramm";
+      });
+      var activeId = parsed.activeId && validOrder.indexOf(parsed.activeId) !== -1
+        ? parsed.activeId
+        : validOrder[0];
+      return { activeId: activeId, order: validOrder, diagrams: parsed.diagrams };
     } catch (e) {
       console.warn("Konnte gespeicherte Daten nicht laden, starte neu.", e);
-      return makeInitialState();
+      return makeInitialWorkspace();
     }
   }
 
   function save() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
     } catch (e) {
       console.warn("Konnte Daten nicht speichern.", e);
     }
@@ -116,6 +138,121 @@
     });
   }
 
+  // ---------- Tabs ----------
+  function renderTabs() {
+    tabList.innerHTML = "";
+
+    workspace.order.forEach(function (id) {
+      var diagram = workspace.diagrams[id];
+      var tab = document.createElement("div");
+      tab.className = "tab" + (id === workspace.activeId ? " active" : "");
+      tab.dataset.id = id;
+
+      var nameEl = document.createElement("span");
+      nameEl.className = "tab-name";
+      nameEl.contentEditable = "false";
+      nameEl.spellcheck = false;
+      nameEl.textContent = diagram.name;
+      nameEl.title = diagram.name;
+      nameEl.addEventListener("input", function () {
+        diagram.name = nameEl.textContent;
+        nameEl.title = diagram.name;
+        save();
+      });
+      nameEl.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          nameEl.blur();
+        }
+      });
+      nameEl.addEventListener("blur", function () {
+        if (nameEl.textContent.trim() === "") {
+          nameEl.textContent = "Diagramm";
+          diagram.name = "Diagramm";
+        }
+        nameEl.contentEditable = "false";
+        save();
+      });
+      tab.appendChild(nameEl);
+
+      var closeBtn = document.createElement("button");
+      closeBtn.className = "tab-close";
+      closeBtn.type = "button";
+      closeBtn.title = "Diagramm schließen";
+      closeBtn.textContent = "×";
+      closeBtn.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
+      closeBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        closeDiagram(id);
+      });
+      tab.appendChild(closeBtn);
+
+      tab.addEventListener("click", function (e) {
+        if (id !== workspace.activeId) {
+          switchDiagram(id);
+          return;
+        }
+        if (e.target === nameEl && nameEl.contentEditable !== "true") {
+          nameEl.contentEditable = "true";
+          nameEl.focus();
+          document.execCommand("selectAll", false, null);
+        }
+      });
+
+      tabList.appendChild(tab);
+    });
+  }
+
+  function switchDiagram(id) {
+    if (!workspace.diagrams[id] || id === workspace.activeId) return;
+    workspace.activeId = id;
+    setActiveState();
+    renderTabs();
+    render();
+    save();
+  }
+
+  function addDiagram() {
+    var diagram = makeDiagram("Diagramm " + (workspace.order.length + 1));
+    workspace.diagrams[diagram.id] = diagram;
+    workspace.order.push(diagram.id);
+    workspace.activeId = diagram.id;
+    setActiveState();
+    autoLayout();
+    renderTabs();
+    render();
+    save();
+  }
+
+  function closeDiagram(id) {
+    var diagram = workspace.diagrams[id];
+    if (!diagram) return;
+    var confirmed = window.confirm(
+      'Diagramm "' + diagram.name + '" wirklich schließen? Es wird dauerhaft gelöscht.'
+    );
+    if (!confirmed) return;
+
+    var idx = workspace.order.indexOf(id);
+    workspace.order.splice(idx, 1);
+    delete workspace.diagrams[id];
+
+    if (workspace.order.length === 0) {
+      var fresh = makeDiagram("Diagramm 1");
+      workspace.diagrams[fresh.id] = fresh;
+      workspace.order.push(fresh.id);
+      workspace.activeId = fresh.id;
+    } else if (workspace.activeId === id) {
+      var nextIdx = Math.min(idx, workspace.order.length - 1);
+      workspace.activeId = workspace.order[nextIdx];
+    }
+
+    setActiveState();
+    autoLayout();
+    renderTabs();
+    render();
+    save();
+  }
+
   // ---------- Rendering ----------
   function render() {
     nodeLayer.innerHTML = "";
@@ -152,7 +289,6 @@
     el.style.left = node.x + "px";
     el.style.top = node.y + "px";
 
-    // delete button (root cannot be deleted)
     if (node.id !== state.rootId) {
       var delBtn = document.createElement("button");
       delBtn.className = "delete-btn";
@@ -442,18 +578,15 @@
     save();
   });
 
-  resetBtn.addEventListener("click", function () {
-    var confirmed = window.confirm("Neuen Baum starten? Der aktuelle Baum wird gelöscht.");
-    if (!confirmed) return;
-    state = makeInitialState();
-    autoLayout();
-    render();
-    save();
+  newTabBtn.addEventListener("click", function () {
+    addDiagram();
   });
 
   // ---------- Init ----------
-  state = load();
+  workspace = load();
+  setActiveState();
   autoLayout();
+  renderTabs();
   render();
   save();
 })();
