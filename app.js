@@ -16,9 +16,143 @@
   var arrangeBtn = document.getElementById("arrange-btn");
   var tabList = document.getElementById("tab-list");
   var newTabBtn = document.getElementById("new-tab-btn");
+  var logoutBtn = document.getElementById("logout-btn");
+  var syncStatusEl = document.getElementById("sync-status");
+  var loginOverlay = document.getElementById("login-overlay");
+  var loginForm = document.getElementById("login-form");
+  var loginToken = document.getElementById("login-token");
+  var loginError = document.getElementById("login-error");
+  var loginSubmit = document.getElementById("login-submit");
 
   var workspace = null; // { activeId, order: [diagramId...], diagrams: { id: diagram } }
   var state = null; // reference to workspace.diagrams[workspace.activeId]
+
+  // ---------- Cloud account (GitHub Gist backend) ----------
+  var GH_TOKEN_KEY = "decision-tree-gh-token";
+  var GH_GIST_ID_KEY = "decision-tree-gist-id";
+  var GIST_FILENAME = "decision-tree-workspace.json";
+
+  var ghToken = localStorage.getItem(GH_TOKEN_KEY);
+  var ghGistId = localStorage.getItem(GH_GIST_ID_KEY);
+  var syncTimer = null;
+
+  function setSyncStatus(text, state) {
+    syncStatusEl.textContent = text;
+    if (state) {
+      syncStatusEl.dataset.state = state;
+    } else {
+      delete syncStatusEl.dataset.state;
+    }
+  }
+
+  function ghHeaders() {
+    return {
+      "Authorization": "token " + ghToken,
+      "Accept": "application/vnd.github+json",
+      "Content-Type": "application/json"
+    };
+  }
+
+  function verifyToken(token) {
+    return fetch("https://api.github.com/user", {
+      headers: {
+        "Authorization": "token " + token,
+        "Accept": "application/vnd.github+json"
+      }
+    }).then(function (res) {
+      if (res.status === 401 || res.status === 403) {
+        var err = new Error("unauthorized");
+        err.unauthorized = true;
+        throw err;
+      }
+      if (!res.ok) throw new Error("verify-failed:" + res.status);
+      return res.json();
+    });
+  }
+
+  function findOrCreateGistAndSync() {
+    return fetch("https://api.github.com/gists?per_page=100", { headers: ghHeaders() })
+      .then(function (res) {
+        if (!res.ok) throw new Error("list-failed:" + res.status);
+        return res.json();
+      })
+      .then(function (gists) {
+        var existing = gists.filter(function (g) { return g.files && g.files[GIST_FILENAME]; })[0];
+        if (existing) {
+          ghGistId = existing.id;
+          localStorage.setItem(GH_GIST_ID_KEY, ghGistId);
+          return pullFromCloud();
+        }
+        var body = {
+          description: "Decision Tree – Arbeitsdaten (bitte nicht löschen)",
+          public: false,
+          files: {}
+        };
+        body.files[GIST_FILENAME] = { content: JSON.stringify(workspace) };
+        return fetch("https://api.github.com/gists", {
+          method: "POST",
+          headers: ghHeaders(),
+          body: JSON.stringify(body)
+        }).then(function (res) {
+          if (!res.ok) throw new Error("create-failed:" + res.status);
+          return res.json();
+        }).then(function (gist) {
+          ghGistId = gist.id;
+          localStorage.setItem(GH_GIST_ID_KEY, ghGistId);
+        });
+      });
+  }
+
+  function pullFromCloud() {
+    return fetch("https://api.github.com/gists/" + ghGistId, { headers: ghHeaders() })
+      .then(function (res) {
+        if (!res.ok) throw new Error("pull-failed:" + res.status);
+        return res.json();
+      })
+      .then(function (gist) {
+        var file = gist.files && gist.files[GIST_FILENAME];
+        if (!file || !file.content) return;
+        var parsed = JSON.parse(file.content);
+        if (parsed && parsed.diagrams && Array.isArray(parsed.order) && parsed.order.length) {
+          workspace = parsed;
+          setActiveState();
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+        }
+      });
+  }
+
+  function pushToCloud() {
+    if (!ghToken || !ghGistId) return;
+    setSyncStatus("Synchronisiere…", "info");
+    var body = { files: {} };
+    body.files[GIST_FILENAME] = { content: JSON.stringify(workspace) };
+    fetch("https://api.github.com/gists/" + ghGistId, {
+      method: "PATCH",
+      headers: ghHeaders(),
+      body: JSON.stringify(body)
+    }).then(function (res) {
+      if (!res.ok) throw new Error("push-failed:" + res.status);
+      setSyncStatus("Gespeichert", "");
+    }).catch(function (err) {
+      console.warn("Cloud-Sync fehlgeschlagen", err);
+      setSyncStatus("Sync-Fehler", "error");
+    });
+  }
+
+  function scheduleCloudSync() {
+    if (!ghToken) return;
+    clearTimeout(syncTimer);
+    setSyncStatus("Änderungen…", "info");
+    syncTimer = setTimeout(pushToCloud, 1200);
+  }
+
+  function ghLogin(token) {
+    ghToken = token;
+    return verifyToken(token).then(function () {
+      localStorage.setItem(GH_TOKEN_KEY, token);
+      return findOrCreateGistAndSync();
+    });
+  }
 
   // ---------- Pan & zoom ----------
   var MIN_SCALE = 0.2;
@@ -92,6 +226,7 @@
     } catch (e) {
       console.warn("Konnte Daten nicht speichern.", e);
     }
+    scheduleCloudSync();
   }
 
   function childrenOf(nodeId) {
@@ -628,12 +763,85 @@
     addDiagram();
   });
 
+  // ---------- Login ----------
+  function renderApp() {
+    autoLayout();
+    renderTabs();
+    render();
+  }
+
+  function showApp() {
+    loginOverlay.hidden = true;
+    renderApp();
+  }
+
+  function showLogin(message) {
+    loginOverlay.hidden = false;
+    loginError.textContent = message || "";
+    loginToken.focus();
+  }
+
+  loginForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var token = loginToken.value.trim();
+    if (!token) return;
+    loginSubmit.disabled = true;
+    loginError.textContent = "";
+    ghLogin(token).then(function () {
+      loginToken.value = "";
+      showApp();
+      setSyncStatus("Gespeichert", "");
+      save();
+    }).catch(function (err) {
+      console.warn("Anmeldung fehlgeschlagen", err);
+      ghToken = null;
+      if (err && err.unauthorized) {
+        loginError.textContent = 'Token ungültig oder abgelaufen. Bitte prüfen, ob die Berechtigung "gist" gesetzt ist.';
+      } else {
+        loginError.textContent = "Netzwerkfehler bei der Anmeldung. Bitte erneut versuchen.";
+      }
+    }).finally(function () {
+      loginSubmit.disabled = false;
+    });
+  });
+
+  logoutBtn.addEventListener("click", function () {
+    var confirmed = window.confirm(
+      "Abmelden? Deine Bäume bleiben in der Cloud gespeichert und sind nach erneuter Anmeldung wieder da."
+    );
+    if (!confirmed) return;
+    ghToken = null;
+    ghGistId = null;
+    localStorage.removeItem(GH_TOKEN_KEY);
+    localStorage.removeItem(GH_GIST_ID_KEY);
+    clearTimeout(syncTimer);
+    setSyncStatus("", "");
+    showLogin();
+  });
+
   // ---------- Init ----------
   applyView();
   workspace = load();
   setActiveState();
-  autoLayout();
-  renderTabs();
-  render();
-  save();
+
+  if (ghToken) {
+    setSyncStatus("Verbinde…", "info");
+    ghLogin(ghToken).then(function () {
+      showApp();
+      setSyncStatus("Gespeichert", "");
+    }).catch(function (err) {
+      console.warn("Automatische Anmeldung fehlgeschlagen", err);
+      if (err && err.unauthorized) {
+        ghToken = null;
+        localStorage.removeItem(GH_TOKEN_KEY);
+        setSyncStatus("", "");
+        showLogin("Anmeldung abgelaufen. Bitte Token erneut eingeben.");
+      } else {
+        setSyncStatus("Offline", "error");
+        showApp();
+      }
+    });
+  } else {
+    showLogin();
+  }
 })();

@@ -59,7 +59,21 @@ html, body {
 
 .toolbar-actions {
   display: flex;
+  align-items: center;
   gap: 10px;
+}
+
+#sync-status {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+#sync-status[data-state="error"] {
+  color: #e0a25c;
 }
 
 .toolbar-actions button {
@@ -388,4 +402,124 @@ html, body {
   #canvas-wrapper {
     height: calc(100vh - 153px);
   }
+
+  #login-overlay form {
+    width: 100%;
+    padding: 32px 24px;
+  }
+}
+
+#login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+#login-overlay[hidden] {
+  display: none;
+}
+
+#login-form {
+  width: 380px;
+  max-width: calc(100vw - 48px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border: 1px solid var(--border-dim);
+  padding: 40px;
+}
+
+#login-form h2 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+
+#login-copy {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+#login-form label {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: 8px;
+}
+
+#login-token {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 13px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-dim);
+  padding: 10px 12px;
+  outline: none;
+}
+
+#login-token:focus {
+  border-color: var(--border);
+}
+
+#login-error {
+  font-size: 12px;
+  color: #e0725c;
+  min-height: 1.2em;
+}
+
+#login-submit {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: var(--accent-fill);
+  color: var(--accent-fg);
+  border: 1px solid var(--accent-fill);
+  padding: 11px 16px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+#login-submit:hover {
+  background: var(--accent-hover);
+}
+
+#login-submit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#login-help {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+#login-help summary {
+  cursor: pointer;
+  color: var(--text);
+}
+
+#login-help ol {
+  padding-left: 18px;
+  line-height: 1.6;
+}
+
+#login-help a {
+  color: var(--text);
+}
+
+#login-help code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  background: rgba(237, 236, 234, 0.08);
+  padding: 1px 4px;
 }

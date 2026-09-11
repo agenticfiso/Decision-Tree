@@ -16,7 +16,9 @@
       <h1>Baumstruktur</h1>
     </div>
     <div class="toolbar-actions">
+      <span id="sync-status" title="Speicherstatus"></span>
       <button id="arrange-btn" title="Baum automatisch anordnen">Anordnen</button>
+      <button id="logout-btn" type="button" title="Konto abmelden">Abmelden</button>
     </div>
   </header>
 
@@ -32,6 +34,30 @@
       <div id="label-layer"></div>
     </div>
   </main>
+
+  <div id="login-overlay" hidden>
+    <form id="login-form">
+      <span class="toolbar-kicker">DECISION&nbsp;TREE</span>
+      <h2>Anmelden</h2>
+      <p id="login-copy">
+        Melde dich mit einem GitHub Personal Access Token an, um deine Bäume
+        geräteübergreifend zu speichern.
+      </p>
+      <label for="login-token">GitHub Personal Access Token</label>
+      <input id="login-token" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_…" />
+      <div id="login-error" role="alert"></div>
+      <button id="login-submit" type="submit">Anmelden</button>
+      <details id="login-help">
+        <summary>Wie bekomme ich einen Token?</summary>
+        <ol>
+          <li>Auf GitHub: <a href="https://github.com/settings/tokens/new?description=Decision%20Tree&scopes=gist" target="_blank" rel="noopener">github.com/settings/tokens/new</a> öffnen (Link setzt „gist"-Berechtigung schon vor)</li>
+          <li>Ablaufdatum wählen, ganz unten „Generate token" klicken</li>
+          <li>Den erzeugten Token (beginnt mit <code>ghp_</code>) kopieren und hier einfügen</li>
+        </ol>
+        <p>Der Token wird nur lokal in deinem Browser gespeichert und ausschließlich für „gist"-Zugriff verwendet.</p>
+      </details>
+    </form>
+  </div>
 
   <script src="app.js"></script>
 </body>
