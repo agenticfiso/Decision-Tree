@@ -9,6 +9,7 @@
   var MARGIN_Y = 60;
 
   var canvasWrapper = document.getElementById("canvas-wrapper");
+  var canvasEl = document.getElementById("canvas");
   var nodeLayer = document.getElementById("node-layer");
   var labelLayer = document.getElementById("label-layer");
   var edgeLayer = document.getElementById("edge-layer");
@@ -18,6 +19,15 @@
 
   var workspace = null; // { activeId, order: [diagramId...], diagrams: { id: diagram } }
   var state = null; // reference to workspace.diagrams[workspace.activeId]
+
+  // ---------- Pan & zoom ----------
+  var MIN_SCALE = 0.2;
+  var MAX_SCALE = 2.5;
+  var view = { x: 0, y: 0, scale: 1 };
+
+  function applyView() {
+    canvasEl.style.transform = "translate(" + view.x + "px, " + view.y + "px) scale(" + view.scale + ")";
+  }
 
   function uid() {
     return "n" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -33,7 +43,7 @@
       nodes: {},
       edges: []
     };
-    diagram.nodes[rootId] = { id: rootId, text: "Thema", x: 0, y: 0 };
+    diagram.nodes[rootId] = { id: rootId, text: "", x: 0, y: 0 };
     return diagram;
   }
 
@@ -266,20 +276,6 @@
     state.edges.forEach(function (edge) {
       renderEdge(edge);
     });
-
-    growCanvasIfNeeded();
-  }
-
-  function growCanvasIfNeeded() {
-    var maxX = 0, maxY = 0;
-    Object.keys(state.nodes).forEach(function (id) {
-      var n = state.nodes[id];
-      maxX = Math.max(maxX, n.x + NODE_WIDTH + 300);
-      maxY = Math.max(maxY, n.y + 300);
-    });
-    var canvas = document.getElementById("canvas");
-    canvas.style.width = Math.max(3000, maxX) + "px";
-    canvas.style.height = Math.max(3000, maxY) + "px";
   }
 
   function renderNode(node) {
@@ -310,19 +306,14 @@
     textEl.contentEditable = "true";
     textEl.spellcheck = false;
     textEl.textContent = node.text;
+    if (node.text.trim() === "") textEl.classList.add("is-empty");
     textEl.addEventListener("input", function () {
       node.text = textEl.textContent;
+      textEl.classList.toggle("is-empty", textEl.textContent.trim() === "");
       save();
     });
     textEl.addEventListener("pointerdown", function (e) {
       e.stopPropagation();
-    });
-    textEl.addEventListener("blur", function () {
-      if (textEl.textContent.trim() === "") {
-        textEl.textContent = "Thema";
-        node.text = "Thema";
-        save();
-      }
     });
     el.appendChild(textEl);
 
@@ -356,6 +347,7 @@
     el.appendChild(controls);
 
     el.addEventListener("pointerdown", function (e) {
+      e.stopPropagation();
       startDrag(node, el, e);
     });
 
@@ -482,7 +474,7 @@
       var childId = uid();
       state.nodes[childId] = {
         id: childId,
-        text: "Thema",
+        text: "",
         x: parent.x,
         y: parent.y + LEVEL_HEIGHT
       };
@@ -515,13 +507,19 @@
   // ---------- Dragging ----------
   var dragState = null;
 
+  function screenToCanvas(clientX, clientY) {
+    var wrapperRect = canvasWrapper.getBoundingClientRect();
+    return {
+      x: (clientX - wrapperRect.left - view.x) / view.scale,
+      y: (clientY - wrapperRect.top - view.y) / view.scale
+    };
+  }
+
   function startDrag(node, el, e) {
     if (e.button !== undefined && e.button !== 0) return;
-    var wrapperRect = canvasWrapper.getBoundingClientRect();
-    var scrollLeft = canvasWrapper.scrollLeft;
-    var scrollTop = canvasWrapper.scrollTop;
-    var pointerX = e.clientX - wrapperRect.left + scrollLeft;
-    var pointerY = e.clientY - wrapperRect.top + scrollTop;
+    var pointer = screenToCanvas(e.clientX, e.clientY);
+    var pointerX = pointer.x;
+    var pointerY = pointer.y;
 
     dragState = {
       node: node,
@@ -542,14 +540,10 @@
 
   function onDragMove(e) {
     if (!dragState) return;
-    var wrapperRect = canvasWrapper.getBoundingClientRect();
-    var scrollLeft = canvasWrapper.scrollLeft;
-    var scrollTop = canvasWrapper.scrollTop;
-    var pointerX = e.clientX - wrapperRect.left + scrollLeft;
-    var pointerY = e.clientY - wrapperRect.top + scrollTop;
+    var pointer = screenToCanvas(e.clientX, e.clientY);
 
-    var newX = Math.max(0, pointerX - dragState.offsetX);
-    var newY = Math.max(0, pointerY - dragState.offsetY);
+    var newX = pointer.x - dragState.offsetX;
+    var newY = pointer.y - dragState.offsetY;
 
     dragState.node.x = newX;
     dragState.node.y = newY;
@@ -567,9 +561,61 @@
     el.removeEventListener("pointerup", onDragEnd);
     el.removeEventListener("pointercancel", onDragEnd);
     dragState = null;
-    growCanvasIfNeeded();
     save();
   }
+
+  // ---------- Canvas pan & zoom ----------
+  var panState = null;
+
+  canvasWrapper.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    var wrapperRect = canvasWrapper.getBoundingClientRect();
+    var mx = e.clientX - wrapperRect.left;
+    var my = e.clientY - wrapperRect.top;
+    var canvasX = (mx - view.x) / view.scale;
+    var canvasY = (my - view.y) / view.scale;
+
+    var factor = Math.exp(-e.deltaY * 0.001);
+    var newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, view.scale * factor));
+
+    view.x = mx - canvasX * newScale;
+    view.y = my - canvasY * newScale;
+    view.scale = newScale;
+    applyView();
+  }, { passive: false });
+
+  function onPanMove(e) {
+    if (!panState) return;
+    view.x = panState.startViewX + (e.clientX - panState.startX);
+    view.y = panState.startViewY + (e.clientY - panState.startY);
+    applyView();
+  }
+
+  function onPanEnd() {
+    if (!panState) return;
+    panState = null;
+    canvasWrapper.classList.remove("panning");
+    canvasWrapper.removeEventListener("pointermove", onPanMove);
+    canvasWrapper.removeEventListener("pointerup", onPanEnd);
+    canvasWrapper.removeEventListener("pointercancel", onPanEnd);
+  }
+
+  canvasWrapper.addEventListener("pointerdown", function (e) {
+    if (e.button !== undefined && e.button !== 0) return;
+    panState = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startViewX: view.x,
+      startViewY: view.y
+    };
+    canvasWrapper.classList.add("panning");
+    if (canvasWrapper.setPointerCapture && e.pointerId !== undefined) {
+      canvasWrapper.setPointerCapture(e.pointerId);
+    }
+    canvasWrapper.addEventListener("pointermove", onPanMove);
+    canvasWrapper.addEventListener("pointerup", onPanEnd);
+    canvasWrapper.addEventListener("pointercancel", onPanEnd);
+  });
 
   // ---------- Toolbar ----------
   arrangeBtn.addEventListener("click", function () {
@@ -583,6 +629,7 @@
   });
 
   // ---------- Init ----------
+  applyView();
   workspace = load();
   setActiveState();
   autoLayout();
